@@ -55,19 +55,28 @@ defmodule WebhookProxy.Router do
       conn
       |> read_body
 
-    headers =
-      conn.req_headers
-      |> Enum.filter(fn {k, _v} -> String.starts_with?(k, "x-") or k == "content-type" end)
+    case conn.req_headers |> Enum.find({}, fn {k, _v} -> k == "content-type" end) do
+      {} ->
+        {:err, 415, "Content-type header missing"}
 
-    {:ok, url, body, headers}
+      content_header = {"content-type", "application/json"} ->
+        x_headers =
+          conn.req_headers
+          |> Enum.filter(fn {k, _v} -> String.starts_with?(k, "x-") end)
+
+        {:ok, url, body, [content_header] ++ x_headers}
+
+      {"content-type", _v} ->
+        {:err, 415, "Content-type must be application/json"}
+    end
   end
 
   def digest_incoming({:err, status, msg}, _conn) do
     {:err, status, msg}
   end
 
-  def make_outgoing({:ok, url, body, _headers}, conn) do
-    case @http_client.post(url, body, [{"Content-Type", "application/json"}]) do
+  def make_outgoing({:ok, url, body, headers}, conn) do
+    case @http_client.post(url, body, headers) do
       {:ok, %HTTPoison.Response{status_code: status}} when status >= 200 and status < 300 ->
         respond(conn, 200, "Received with thanks")
 

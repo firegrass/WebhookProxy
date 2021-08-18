@@ -21,7 +21,7 @@ defmodule WebhookProxy.RouterTest do
     WebhookProxy.MockHTTPoison
     |> expect(:post, fn "http://test_server:3000/webhook",
                         _,
-                        [{"Content-Type", "application/json"}] ->
+                        [{"content-type", "application/json"}] ->
       {:ok,
        %HTTPoison.Response{
          body: %{status: "processed"} |> Jason.encode!(),
@@ -32,6 +32,7 @@ defmodule WebhookProxy.RouterTest do
     conn =
       :post
       |> conn("/receive/aHR0cDovL3Rlc3Rfc2VydmVyOjMwMDAvd2ViaG9vawo=", "")
+      |> put_req_header("content-type", "application/json")
       |> Router.call(@opts)
 
     assert conn.state == :sent
@@ -43,36 +44,71 @@ defmodule WebhookProxy.RouterTest do
     url = "http://test_server:3000/webhook"
 
     url_base64 =
-      url <> "\n"
+      (url <> "\n")
       |> Base.encode64()
       |> String.trim()
 
     WebhookProxy.MockHTTPoison
-    |> expect(:post, fn ^url,
-    _,
-      [{"Content-Type", "application/json"}] ->
-        {:ok,
-         %HTTPoison.Response{
-           body: %{status: "processed"} |> Jason.encode!(),
-           status_code: 200
-         }}
+    |> expect(:post, fn ^url, _, [{"content-type", "application/json"}] ->
+      {:ok,
+       %HTTPoison.Response{
+         body: %{status: "processed"} |> Jason.encode!(),
+         status_code: 200
+       }}
     end)
 
     conn =
       :post
       |> conn("/receive/#{url_base64}", "")
-    |> Router.call(@opts)
+      |> put_req_header("content-type", "application/json")
+      |> Router.call(@opts)
 
     assert conn.state == :sent
     assert conn.status == 200
     assert conn.resp_body == "Received with thanks"
   end
 
+  test "forward x- headers" do
+    WebhookProxy.MockHTTPoison
+    |> expect(:post, fn "http://test_server:3000/webhook",
+                        _,
+                        [{"content-type", "application/json"}, {"x-test", "test"}] ->
+      {:ok,
+       %HTTPoison.Response{
+         body: %{status: "processed"} |> Jason.encode!(),
+         status_code: 200
+       }}
+    end)
+
+    conn =
+      :post
+      |> conn("/receive/aHR0cDovL3Rlc3Rfc2VydmVyOjMwMDAvd2ViaG9vawo=", "")
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("x-test", "test")
+      |> Router.call(@opts)
+
+    assert conn.state == :sent
+    assert conn.status == 200
+    assert conn.resp_body == "Received with thanks"
+  end
+
+  test "don't forward non application/json" do
+    conn =
+      :post
+      |> conn("/receive/aHR0cDovL3Rlc3Rfc2VydmVyOjMwMDAvd2ViaG9vawo=", "")
+      |> put_req_header("content-type", "application/xml")
+      |> Router.call(@opts)
+
+    assert conn.state == :sent
+    assert conn.status == 415
+    assert conn.resp_body == "Content-type must be application/json"
+  end
+
   test "return 5xx if downstream webhook fails" do
     WebhookProxy.MockHTTPoison
     |> expect(:post, fn "http://test_server:3000/webhook",
                         _,
-                        [{"Content-Type", "application/json"}] ->
+                        [{"content-type", "application/json"}] ->
       {:ok,
        %HTTPoison.Response{
          body: %{status: "processed"} |> Jason.encode!(),
@@ -83,6 +119,7 @@ defmodule WebhookProxy.RouterTest do
     conn =
       :post
       |> conn("/receive/aHR0cDovL3Rlc3Rfc2VydmVyOjMwMDAvd2ViaG9vawo=", "")
+      |> put_req_header("content-type", "application/json")
       |> Router.call(@opts)
 
     assert conn.state == :sent
@@ -101,6 +138,7 @@ defmodule WebhookProxy.RouterTest do
     conn =
       :post
       |> conn("/receive/#{url_base64}", "")
+      |> put_req_header("content-type", "application/json")
       |> Router.call(@opts)
 
     assert conn.state == :sent
