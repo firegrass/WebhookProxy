@@ -8,8 +8,6 @@ defmodule WebhookProxy.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Starts a worker by calling: WebhookProxy.Worker.start_link(arg)
-      # {WebhookProxy.Worker, arg}
       {Plug.Cowboy, scheme: :http, plug: WebhookProxy.Router, options: [port: 8080]}
     ]
 

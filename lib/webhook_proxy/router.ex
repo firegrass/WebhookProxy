@@ -24,7 +24,7 @@ defmodule WebhookProxy.Router do
 
   def validate_url({:ok, url}) do
     build_regex()
-    |> check_url_match(url |> String.trim)
+    |> check_url_match(url |> String.trim())
   end
 
   def validate_url(_) do
